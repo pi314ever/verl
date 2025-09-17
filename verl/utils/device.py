@@ -38,9 +38,21 @@ def is_torch_npu_available(check_device=True) -> bool:
     except ImportError:
         return False
 
+def is_torch_xpu_available(check_device=True) -> bool:
+    """Check the availability of XPU"""
+    try:
+        if not hasattr(torch, "xpu")
+            return False
+        if check_device:
+            return torch.xpu.is_available()
+        else:
+            return True
+    except ImportError:
+        return False
 
 is_cuda_available = torch.cuda.is_available()
 is_npu_available = is_torch_npu_available()
+is_xpu_available = is_torch_xpu_available()
 
 
 def get_resource_name() -> str:
@@ -77,6 +89,8 @@ def get_device_name() -> str:
         device = "cuda"
     elif is_npu_available:
         device = "npu"
+    elif is_xpu_available:
+        device = "xpu"
     else:
         device = "cpu"
     return device
@@ -120,6 +134,8 @@ def get_nccl_backend() -> str:
     """
     if is_npu_available:
         return "hccl"
+    elif is_xpu_available:
+        return "ccl"
     else:
         # default to nccl
         return "nccl"
