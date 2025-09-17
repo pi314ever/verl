@@ -21,7 +21,7 @@ from importlib.metadata import version as get_version
 from packaging.version import parse as parse_version
 
 from .protocol import DataProto
-from .utils.device import is_npu_available
+from .utils.device import is_npu_available, is_xpu_available
 from .utils.logging_utils import set_basic_config
 
 version_folder = os.path.dirname(os.path.join(os.path.abspath(__file__)))
@@ -90,3 +90,19 @@ if is_npu_available:
             device_module.synchronize()
 
         TensorDictBase._sync_all = _sync_all_patch
+
+if is_xpu_available:
+    from vllm.platforms.xpu import XPUPlatform
+    from vllm.config import VllmConfig
+
+    original_check_and_update_config = XPUPlatform.check_and_update_config
+
+    def patched_check_and_update_config(cls, vllm_config: VllmConfig) -> None:
+        external_launcher = vllm_config.parallel_config.distributed_executor_backend == "external_launcher"
+        original_check_and_update_config(vllm_config)
+        if external_launcher:
+            # vllm xpu will change this field
+            vllm_config.parallel_config.distributed_executor_backend = "external_launcher"
+
+    # Monkey patch the method
+    XPUPlatform.check_and_update_config = classmethod(patched_check_and_update_config)
