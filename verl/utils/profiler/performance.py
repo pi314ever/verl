@@ -217,7 +217,7 @@ def reduce_timing(
         key_list.append(key)
         timing_list.append(timing_raw[key])
     timing_list = torch.tensor(timing_list, dtype=torch.float32, device=get_device_id())
-    if isinstance(reduce_op, torch.distributed.ReduceOp.AVG):
+    if reduce_op == torch.distributed.ReduceOp.AVG:
         torch.distributed.all_reduce(timing_list, op=torch.distributed.ReduceOp.SUM)
         timing_list /= torch.distributed.get_world_size()
     else:

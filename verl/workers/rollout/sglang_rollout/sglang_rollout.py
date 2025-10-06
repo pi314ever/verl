@@ -471,6 +471,7 @@ class SGLangRollout(BaseRollout):
                 args["max_start_wait_time"] = self.config.server["max_start_wait_time"]
                 self._engine = AsyncHttpServerAdapter(**args)
             else:
+                args["disable_overlap_schedule"] = True
                 self._engine = AsyncEngine(**args)
         else:
             self._engine = None
