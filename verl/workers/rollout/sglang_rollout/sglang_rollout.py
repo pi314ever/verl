@@ -581,7 +581,9 @@ class SGLangRollout(BaseRollout):
             response_mask: | 1, 1, 1, ..., 1, 1 | 0, 0, .., 0, 0 | 1, 1, 1, ..., 1, 1 | 0, 0, ..., 0|
         """
         if self.config.multi_turn.enable:
+            print("req level")
             return self._req_level_generate_sequences(prompts, **kwargs)
+        print("Batch level")
         return self._batch_level_generate_sequences(prompts, **kwargs)
 
     @GPUMemoryLogger(role="sglang rollout", logger=logger)
@@ -717,6 +719,7 @@ class SGLangRollout(BaseRollout):
         request_sampling_params.update(kwargs)
 
         if self._tp_rank == 0:
+            print("SGLang generate")
             loop = asyncio.get_event_loop()
             output = loop.run_until_complete(
                 self._engine.async_generate(
@@ -731,7 +734,9 @@ class SGLangRollout(BaseRollout):
             output = None
 
         # Most naive implementation, can extract tensor and send via gloo if too slow
+        print("Dist barrier")
         dist.barrier()
+        print("Broadcast pyobj")
         [output] = broadcast_pyobj(
             data=[output],
             rank=self._rank,
@@ -739,7 +744,9 @@ class SGLangRollout(BaseRollout):
             src=self._device_mesh_cpu["tp"].mesh[0].item(),
             force_cpu_device=False,
         )
+        print("Post processing outputs")
         out = _post_process_outputs(self.processing_class, output)
+        print(f"{out=}")
 
         response = out[0].to(idx.device)
         rollout_log_probs = None

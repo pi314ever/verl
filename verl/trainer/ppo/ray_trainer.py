@@ -982,10 +982,13 @@ class RayPPOTrainer:
 
                 with marked_timer("step", timing_raw):
                     # generate a batch
+                    print("Generating batch")
                     with marked_timer("gen", timing_raw, color="red"):
                         if not self.async_rollout_mode:
+                            print(f"{self.actor_rollout_wg=}")
                             gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
                         else:
+                            print(f"{self.async_rollout_manager=}")
                             gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch)
                         timing_raw.update(gen_batch_output.meta_info["timing"])
                         gen_batch_output.meta_info.pop("timing", None)
@@ -1028,6 +1031,7 @@ class RayPPOTrainer:
                     # compute global_valid tokens
                     batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
 
+                    print("Compute reward model score")
                     with marked_timer("reward", timing_raw, color="yellow"):
                         # compute reward model score
                         if self.use_rm and "rm_scores" not in batch.batch.keys():
@@ -1039,6 +1043,7 @@ class RayPPOTrainer:
                         else:
                             reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
 
+                    print("Recompute old log probs")
                     # recompute old_log_probs
                     with marked_timer("old_log_prob", timing_raw, color="blue"):
                         old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
@@ -1058,6 +1063,7 @@ class RayPPOTrainer:
                             metrics.update(calculate_debug_metrics(batch))
 
                     if self.use_reference_policy:
+                        print("Use reference policy")
                         # compute reference log_prob
                         with marked_timer("ref", timing_raw, color="olive"):
                             if not self.ref_in_actor:
@@ -1068,10 +1074,12 @@ class RayPPOTrainer:
 
                     # compute values
                     if self.use_critic:
+                        print("Compute critic values")
                         with marked_timer("values", timing_raw, color="cyan"):
                             values = self.critic_wg.compute_values(batch)
                             batch = batch.union(values)
 
+                    print("Compute advantage")
                     with marked_timer("adv", timing_raw, color="brown"):
                         # we combine with rule-based rm
                         reward_extra_infos_dict: dict[str, list]
@@ -1109,6 +1117,7 @@ class RayPPOTrainer:
 
                     # update critic
                     if self.use_critic:
+                        print("Update critic")
                         with marked_timer("update_critic", timing_raw, color="pink"):
                             critic_output = self.critic_wg.update_critic(batch)
                         critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
@@ -1116,6 +1125,7 @@ class RayPPOTrainer:
 
                     # implement critic warmup
                     if self.config.trainer.critic_warmup <= self.global_steps:
+                        print("Update actor")
                         # update actor
                         with marked_timer("update_actor", timing_raw, color="red"):
                             batch.meta_info["multi_turn"] = self.config.actor_rollout_ref.rollout.multi_turn.enable
