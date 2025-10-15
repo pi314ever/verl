@@ -92,17 +92,20 @@ if is_npu_available:
         TensorDictBase._sync_all = _sync_all_patch
 
 if is_xpu_available:
-    from vllm.platforms.xpu import XPUPlatform
-    from vllm.config import VllmConfig
+    try:
+        from vllm.platforms.xpu import XPUPlatform
+        from vllm.config import VllmConfig
 
-    original_check_and_update_config = XPUPlatform.check_and_update_config
+        original_check_and_update_config = XPUPlatform.check_and_update_config
 
-    def patched_check_and_update_config(cls, vllm_config: VllmConfig) -> None:
-        external_launcher = vllm_config.parallel_config.distributed_executor_backend == "external_launcher"
-        original_check_and_update_config(vllm_config)
-        if external_launcher:
-            # vllm xpu will change this field
-            vllm_config.parallel_config.distributed_executor_backend = "external_launcher"
+        def patched_check_and_update_config(cls, vllm_config: VllmConfig) -> None:
+            external_launcher = vllm_config.parallel_config.distributed_executor_backend == "external_launcher"
+            original_check_and_update_config(vllm_config)
+            if external_launcher:
+                # vllm xpu will change this field
+                vllm_config.parallel_config.distributed_executor_backend = "external_launcher"
 
-    # Monkey patch the method
-    XPUPlatform.check_and_update_config = classmethod(patched_check_and_update_config)
+        # Monkey patch the method
+        XPUPlatform.check_and_update_config = classmethod(patched_check_and_update_config)
+    except ImportError:
+        pass

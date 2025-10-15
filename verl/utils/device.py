@@ -95,7 +95,7 @@ def get_nccl_backend() -> str:
     elif is_npu_available:
         return "hccl"
     elif is_xpu_available:
-        return "ccl"
+        return "xccl"
     else:
         raise RuntimeError(f"No available nccl backend found on device type {get_device_name()}.")
 
