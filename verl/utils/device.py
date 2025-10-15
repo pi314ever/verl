@@ -135,7 +135,7 @@ def get_nccl_backend() -> str:
     if is_npu_available:
         return "hccl"
     elif is_xpu_available:
-        return "ccl"
+        return "xccl"
     else:
         # default to nccl
         return "nccl"

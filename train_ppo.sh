@@ -28,6 +28,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
 	actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
 	actor_rollout_ref.ref.fsdp_config.param_offload=True \
 	algorithm.kl_ctrl.kl_coef=0.001 \
+	+ray_kwargs.ray_init.num_gpus=1 \
 	trainer.logger=['console'] \
 	trainer.val_before_train=False \
 	trainer.n_gpus_per_node=1 \
