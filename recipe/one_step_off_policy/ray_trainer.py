@@ -258,7 +258,8 @@ class OneStepOffRayTrainer(RayPPOTrainer):
         self.actor_wg.init_model()
         self.rollout_wg.init_model()
         self.actor_rollout_wg = self.actor_wg  # to be compatible with the functions that not be modified
-        weights_info = self.actor_wg.get_actor_weights_info()[0]
+        # NOTE(Daniel): This can be useful pattern to hook into
+        weights_info = self.actor_wg.get_actor_weights_info()
         self.rollout_wg.set_actor_weights_info(weights_info)
 
         self.create_weight_sync_group()
