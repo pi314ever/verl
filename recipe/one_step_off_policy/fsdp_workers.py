@@ -102,42 +102,31 @@ class ActorRolloutRefWorker(ARRWorker):
         except:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-        # TODO: This is the main thread that we need to get data from
+        # TODO(Daniel): Clean this code up.
         if self._is_actor:
             return
-        rank = int(os.environ.get("RANK", 0))
         from nixl._api import nixl_agent, nixl_agent_config
+
         if hasattr(self, "_nixl_agent"):
             agent = self._nixl_agent
         else:
             nixl_config = nixl_agent_config(num_threads=8)
             agent = nixl_agent("rollout", nixl_config)
             self._nixl_agent = agent
-        def print_rank(*args, **kwargs):
-            print(f"({rank=})", *args, **kwargs)
-        print_rank(f"Looping through {len(self._weights_info)}")
-        for i, (agent_meta, weights_info) in enumerate(self._weights_info):
-            print_rank("Adding remote agent")
+        collated_weights = {}
+        for remote_agent_name, agent_meta, weights_info in self._weights_info:
             agent.add_remote_agent(agent_meta)
             for key, target_desc_str, shape, dtype in weights_info:
-                print_rank("Init empty tensor")
                 tensor = torch.empty(shape, dtype=dtype, device=get_torch_device().current_device())
-                print_rank("Deserialize descs")
                 target_desc = agent.deserialize_descs(target_desc_str)
-                print_rank("Register memory")
                 descs = agent.register_memory([tensor])
-                print_rank("Trim desc")
                 initiator_desc = descs.trim()
-                print_rank("Init xfer")
-                xfer_handle = agent.initialize_xfer("READ", initiator_desc, target_desc, f"actor_{i}", "UUID")
-                print_rank("Transfer")
+                xfer_handle = agent.initialize_xfer("READ", initiator_desc, target_desc, remote_agent_name, "UUID")
                 state = agent.transfer(xfer_handle)
                 while state != "DONE":
                     state = agent.check_xfer_state(xfer_handle)
                     if state == "ERR":
                         raise f"Failed to transfer: {key=}, {target_desc_str=}, {initiator_desc=}"
-                print_rank(f"Received {tensor=}")
-                print_rank("Rollout tensor sync")
                 if rollout_name == "vllm":
                     inference_model.load_weights([(key, tensor)])
                 elif rollout_name == "sglang":
@@ -160,12 +149,13 @@ class ActorRolloutRefWorker(ARRWorker):
     def get_actor_weights_info(self):
         from nixl._api import nixl_agent, nixl_agent_config
 
+        rank = int(os.environ.get("RANK", 0))
+        agent_name = f"actor_{rank}"
         if hasattr(self, "_nixl_agent"):
             agent = self._nixl_agent
         else:
             nixl_config = nixl_agent_config(num_threads=8)
-            rank = int(os.environ.get("RANK", 0))
-            agent = nixl_agent(f"actor_{rank}", nixl_config)
+            agent = nixl_agent(agent_name, nixl_config)
             self._nixl_agent = agent
         assert self._is_actor
         if hasattr(self, "_weights_info"):
@@ -187,9 +177,9 @@ class ActorRolloutRefWorker(ARRWorker):
             target_desc_str = agent.get_serialized_descs(target_descs)
             nixl_meta.append((key, target_desc_str, local_tensor.shape, local_tensor.dtype))
         agent_meta = agent.get_agent_metadata()
-        self._weights_info = (agent_meta, nixl_meta)
+        self._weights_info = (agent_name, agent_meta, nixl_meta,)
         print(f"Actor rank {rank} finished getting metadata")
-        return agent_meta, nixl_meta
+        return agent_name, agent_meta, nixl_meta
 
 
 class RolloutWorker(ActorRolloutRefWorker):
