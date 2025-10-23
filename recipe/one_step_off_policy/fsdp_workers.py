@@ -107,16 +107,24 @@ class ActorRolloutRefWorker(ARRWorker):
             return
         from nixl._api import nixl_agent, nixl_agent_config
 
+        rank = int(os.environ.get("RANK", 0))
         if hasattr(self, "_nixl_agent"):
             agent = self._nixl_agent
         else:
             nixl_config = nixl_agent_config(num_threads=8)
-            agent = nixl_agent("rollout", nixl_config)
+            agent = nixl_agent(f"rollout_{rank}", nixl_config)
             self._nixl_agent = agent
+        def print_rank(*args, **kwargs):
+            print(f"({rank=})", *args, **kwargs)
         collated_weights = {}
+        shard_dims = {}
         for remote_agent_name, agent_meta, weights_info in self._weights_info:
+            # NOTE(Daniel): If tp rollout, need to sync rank-to-rank or shard afterwards. Currently only supports dp since each rollout gets full weights
+            # if remote_agent_name != f"actor_{rank}":
+            #     continue
+            print_rank(f"Adding {remote_agent_name=}")
             agent.add_remote_agent(agent_meta)
-            for key, target_desc_str, shape, dtype in weights_info:
+            for key, target_desc_str, shape, dtype, shard_dim in weights_info:
                 tensor = torch.empty(shape, dtype=dtype, device=get_torch_device().current_device())
                 target_desc = agent.deserialize_descs(target_desc_str)
                 descs = agent.register_memory([tensor])
@@ -127,10 +135,18 @@ class ActorRolloutRefWorker(ARRWorker):
                     state = agent.check_xfer_state(xfer_handle)
                     if state == "ERR":
                         raise f"Failed to transfer: {key=}, {target_desc_str=}, {initiator_desc=}"
-                if rollout_name == "vllm":
-                    inference_model.load_weights([(key, tensor)])
-                elif rollout_name == "sglang":
-                    loop.run_until_complete(self.update_weights(inference_model, [(key, tensor)]))
+                if key not in collated_weights:
+                    collated_weights[key] = [tensor]
+                else:
+                    collated_weights[key].append(tensor)
+                shard_dims[key] = shard_dim
+        print_rank("Rollout tensor sync")
+        for key, tensor_list in collated_weights.items():
+            tensor = torch.cat(tensor_list, dim=shard_dims[key])
+            if rollout_name == "vllm":
+                inference_model.load_weights([(key, tensor)])
+            elif rollout_name == "sglang":
+                loop.run_until_complete(self.update_weights(inference_model, [(key, tensor)]))
 
     async def update_weights(self, inference_engine, params):
         from sglang.srt.weight_sync.utils import update_weights as sgl_update_weights
@@ -148,6 +164,7 @@ class ActorRolloutRefWorker(ARRWorker):
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def get_actor_weights_info(self):
         from nixl._api import nixl_agent, nixl_agent_config
+        from torch.distributed._tensor.placement_types import Shard
 
         rank = int(os.environ.get("RANK", 0))
         agent_name = f"actor_{rank}"
@@ -170,12 +187,13 @@ class ActorRolloutRefWorker(ARRWorker):
             )
         params = self._get_actor_params()
         nixl_meta = []
-        for key, tensor in params.items():
+        for key, tensor in sorted(params.items(), key=lambda x: x[0]):
             local_tensor = tensor.to_local()
             reg_descs = agent.register_memory([local_tensor])
             target_descs = reg_descs.trim()
             target_desc_str = agent.get_serialized_descs(target_descs)
-            nixl_meta.append((key, target_desc_str, local_tensor.shape, local_tensor.dtype))
+            shard_dim = next(p.dim for p in tensor.placements if isinstance(p, Shard))
+            nixl_meta.append((key, target_desc_str, local_tensor.shape, local_tensor.dtype, shard_dim))
         agent_meta = agent.get_agent_metadata()
         self._weights_info = (agent_name, agent_meta, nixl_meta,)
         print(f"Actor rank {rank} finished getting metadata")
