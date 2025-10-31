@@ -110,6 +110,7 @@ class OneStepOffRayTrainer(RayPPOTrainer):
         collate_fn=None,
         train_sampler: Sampler | None = None,
         device_name="cuda",
+        rollout_device_name="cuda",
     ):
         """
         Initialize distributed PPO trainer with Ray backend.
@@ -149,6 +150,7 @@ class OneStepOffRayTrainer(RayPPOTrainer):
         self.use_critic = need_critic(config)
         self.ray_worker_group_cls = ray_worker_group_cls
         self.device_name = device_name
+        self.rollout_device_name = rollout_device_name
         self.validation_generations_logger = ValidationGenerationsLogger()
 
         # if ref_in_actor is True, the reference policy will be actor without lora applied
@@ -232,10 +234,11 @@ class OneStepOffRayTrainer(RayPPOTrainer):
 
         for resource_pool, class_dict in self.resource_pool_to_cls.items():
             worker_dict_cls = create_colocated_worker_cls(class_dict=class_dict)
+            device_name = self.rollout_device_name if "rollout" in class_dict else self.device_name
             wg_dict = self.ray_worker_group_cls(
                 resource_pool=resource_pool,
                 ray_cls_with_init=worker_dict_cls,
-                device_name=self.device_name,
+                device_name=device_name,
                 **wg_kwargs,
             )
             spawn_wg = wg_dict.spawn(prefix_set=class_dict.keys())

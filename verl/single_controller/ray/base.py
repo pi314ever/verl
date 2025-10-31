@@ -118,6 +118,8 @@ class RayResourcePool(ResourcePool):
             device_name = "NPU"
         elif device_name == "cuda":
             device_name = "GPU"
+        elif device_name == "hpu":
+            device_name = "HPU"
 
         bundle = {"CPU": self.max_colocate_count}
         if self.use_gpu:
