@@ -97,11 +97,7 @@ class ActorRolloutRefWorker(ARRWorker):
                 inference_model = self.rollout._engine
             else:
                 raise NotImplementedError(f"Unknown rollout name: {rollout_name}")
-        try:
-            loop = asyncio.get_event_loop()
-        except:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        loop = get_event_loop()
         # TODO(Daniel): Clean this code up.
         if self._is_actor:
             return

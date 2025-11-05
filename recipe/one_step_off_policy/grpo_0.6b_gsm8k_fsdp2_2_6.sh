@@ -57,6 +57,7 @@ python3 -m recipe.one_step_off_policy.main_ppo \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=16 \
     actor_rollout_ref.ref.fsdp_config.param_offload=True \
     actor_rollout_ref.ref.fsdp_config.model_dtype=fp16 \
+    +actor_rollout_ref.model.override_config.attn_implementation=eager \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.val_before_train=True \
