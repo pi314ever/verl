@@ -55,10 +55,12 @@ else:
             f"vLLM version {package_version} support has been removed. vLLM 0.5.4 and 0.6.3 are no longer "
             f"supported. Please use vLLM 0.7.0 or later."
         )
-    if not is_sglang_available():
-        raise ValueError(
-            f"vllm version {package_version} not supported and SGLang also not Found. Currently supported "
-            f"vllm versions are 0.7.0+"
-        )
+    # NOTE(Daniel): This is due to current gaudi versions.
+    # if not is_sglang_available():
+    #     raise ValueError(
+    #         f"vllm version {package_version} not supported and SGLang also not Found. Currently supported "
+    #         f"vllm versions are 0.7.0+"
+    #     )
+    from vllm.distributed import parallel_state
 
 __all__ = ["LLM", "parallel_state"]
