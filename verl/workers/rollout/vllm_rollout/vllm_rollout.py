@@ -41,7 +41,7 @@ from torch.multiprocessing.reductions import reduce_tensor
 
 from verl import DataProto
 from verl.third_party.vllm import VLLM_SLEEP_LEVEL, get_version
-from verl.utils.device import get_device_id, get_device_name, get_torch_device
+from verl.utils.device import get_device_id, get_device_name, get_torch_device, is_xpu_available
 from verl.utils.torch_dtypes import PrecisionType
 from verl.workers.config import HFModelConfig, RolloutConfig
 from verl.workers.rollout.base import BaseRollout
@@ -201,7 +201,8 @@ class ServerAdapter(BaseRollout):
         s.close()
         del buffer
         gc.collect()
-        get_torch_device().ipc_collect()
+        if not is_xpu_available:
+            get_torch_device().ipc_collect()
         get_torch_device().empty_cache()
         if future is not None:
             await future

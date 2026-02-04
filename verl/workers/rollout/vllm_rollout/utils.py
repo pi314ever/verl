@@ -25,7 +25,7 @@ from typing import Any, Callable, TypedDict, get_args
 import torch
 import zmq
 
-from verl.utils.device import get_torch_device, is_npu_available
+from verl.utils.device import get_torch_device, is_npu_available, is_xpu_available
 from verl.utils.vllm import TensorLoRARequest, VLLMHijack
 from verl.utils.vllm.patch import patch_vllm_moe_model_weight_loader
 from verl.utils.vllm.vllm_fp8_utils import apply_vllm_fp8_patches, is_fp8_model, load_quanted_weights
@@ -101,6 +101,9 @@ def monkey_patch_compute_logits(model, vocab_size: int):
 def rebuild_ipc(handle: tuple[Callable, tuple], device_id: int | None = None) -> torch.Tensor:
     func, args = handle
     list_args = list(args)
+    if is_xpu_available:
+        # NOTE: XPU does not support rebuild_ipc for now.
+        return func(*list_args)
     if device_id is not None:
         # the key is to change device id to the current device id
         # in case two processes have different CUDA_VISIBLE_DEVICES
@@ -198,7 +201,8 @@ class vLLMColocateWorkerExtension:
         socket.close()
         del buffer
         gc.collect()
-        get_torch_device().ipc_collect()
+        if not is_xpu_available:
+            get_torch_device().ipc_collect()
         get_torch_device().empty_cache()
 
     def _update_weights(self, weights: list[tuple[str, torch.Tensor]], peft_config: dict, base_sync_done: bool):

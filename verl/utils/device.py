@@ -41,7 +41,7 @@ def is_torch_npu_available(check_device=True) -> bool:
 def is_torch_xpu_available(check_device=True) -> bool:
     """Check the availability of XPU"""
     try:
-        if not hasattr(torch, "xpu")
+        if not hasattr(torch, "xpu"):
             return False
         if check_device:
             return torch.xpu.is_available()
@@ -60,7 +60,9 @@ def get_resource_name() -> str:
     Returns:
         ray resource name string, either "GPU" or "NPU".
     """
-    return "GPU" if is_cuda_available else "NPU"
+    if is_cuda_available or is_xpu_available:
+        return "GPU"
+    return "NPU"
 
 
 def get_visible_devices_keyword() -> str:
@@ -73,7 +75,11 @@ def get_visible_devices_keyword() -> str:
         str: 'CUDA_VISIBLE_DEVICES' if CUDA is available,
             'ASCEND_RT_VISIBLE_DEVICES' otherwise.
     """
-    return "CUDA_VISIBLE_DEVICES" if not is_torch_npu_available(check_device=False) else "ASCEND_RT_VISIBLE_DEVICES"
+    if is_torch_npu_available(check_device=False):
+        return "ASCEND_RT_VISIBLE_DEVICES"
+    if is_torch_xpu_available(check_device=False):
+        return "ZE_AFFINITY_MASK"
+    return "CUDA_VISIBLE_DEVICES"
 
 
 def get_device_name() -> str:
@@ -175,7 +181,18 @@ def auto_set_device(config) -> None:
                     f"from default value in config file, automatically set to `npu` instead."
                 )
 
+            # FIXME: Should this override cpu?
             config.trainer.device = "npu"
+
+        if is_xpu_available:
+            if config.trainer.device not in ["cpu", "xpu"]:
+                logger.warning(
+                    f"Detect setting config.trainer.device to {config.trainer.device} for Intel XPU, maybe"
+                    f"from default value in config file, automatically set to `xpu` instead."
+                )
+
+                config.trainer.device = "xpu"
+
         # Other cases: set device to "cuda" via config file, no need to change.
 
 
